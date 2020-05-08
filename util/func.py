@@ -1,3 +1,4 @@
 from typing import Callable, Any
 
-Case : Callable[[Any], Callable[[int], bool]] = lambda x: lambda n: x < n
+CaseLessThan: Callable[[int], Callable[[int], bool]] = lambda x: lambda n: x < n
+Case: Callable[[Any], Callable[[Any], bool]] = lambda x: lambda n: x == n

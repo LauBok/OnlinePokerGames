@@ -1,8 +1,10 @@
 from __future__ import annotations
+import sys
+sys.path.append("./util")
 from enum import unique, Enum, IntFlag
 from dataclasses import dataclass
 from typing import Optional, List, Callable, Union
-from func import Case
+from func import CaseLessThan, Case
 from functools import singledispatch
 
 @unique
@@ -11,7 +13,9 @@ class CardSuit(IntFlag):
     Heart = 2,
     Club = 4,
     Diamond = 8,
-    Joker = 16
+    BlackJoker = 16,
+    RedJoker = 32,
+    Joker = 48
 
     @staticmethod
     def filterSuit(filter: int) -> Callable[[Card], bool]:
@@ -47,12 +51,13 @@ class Card:
         '''Return the suit type of the card'''
         if self.ID is None:
             return None
-        case = Case(self.ID)
+        case = CaseLessThan(self.ID)
         if case(13):    return CardSuit.Diamond
         elif case(26):  return CardSuit.Club
         elif case(39):  return CardSuit.Heart
         elif case(52):  return CardSuit.Spade
-        else:           return CardSuit.Joker
+        elif case(53):  return CardSuit.BlackJoker
+        else:           return CardSuit.RedJoker
 
     @property
     def rank(self) -> Optional[int]:
@@ -63,28 +68,29 @@ class Card:
         '''
         if self.ID is None:
             return None
-        case = Case(self.ID)
+        case = CaseLessThan(self.ID)
         if case(52):    return self.ID % 13
         else:           return self.ID - 52
 
     def _suit_str(self) -> str:
         suit = self.suit
-        if suit is None:                return 'None'
-        if suit == CardSuit.Spade:      return u'\u2660'
-        if suit == CardSuit.Heart:      return u'\u2665'
-        if suit == CardSuit.Club:       return u'\u2663'
-        if suit == CardSuit.Diamond:    return u'\u2666'
-        if suit == CardSuit.Joker:      return 'Joker'
+        if suit is None:               return 'None'
+        if suit & CardSuit.Spade:      return u'\u2660'
+        if suit & CardSuit.Heart:      return u'\u2665'
+        if suit & CardSuit.Club:       return u'\u2663'
+        if suit & CardSuit.Diamond:    return u'\u2666'
+        if suit & CardSuit.Joker:      return 'Joker'
         raise ValueError('Undefined suit type.')
 
     def _rank_str(self) -> str:
         rank = self.rank
         if rank is None:    return 'None'
-        if Case(rank)(1):   return 'A'
-        if Case(rank)(10):  return str(rank + 1)
-        if Case(rank)(11):  return 'J'
-        if Case(rank)(12):  return 'Q'
-        if Case(rank)(13):  return 'K'
+        case = CaseLessThan(rank)
+        if case(1):   return 'A'
+        if case(10):  return str(rank + 1)
+        if case(11):  return 'J'
+        if case(12):  return 'Q'
+        if case(13):  return 'K'
         raise ValueError('Undefined rank value.')
 
     ### operator methods
@@ -113,11 +119,20 @@ class CardList:
         else:
             self.cardlist = cardlist
         self._sort()
+    
+    @staticmethod
+    def fromlist(intlist: Optional[List[int]] = None):
+        if intlist is None:
+            return CardList()
+        return CardList([Card(ID) for ID in intlist])
 
     @property
     def size(self) -> int:
         '''Return the number of cards in the list'''
         return len(self.cardlist)
+    
+    def tolist(self) -> List[int]:
+        return [card.ID for card in self.cardlist]
 
     def isEmpty(self) -> bool:
         '''check if the current list is empty'''
@@ -216,7 +231,7 @@ class CardList:
         '''
         Insert a card or a list of card into current card list.
         The current object will be modified.
-        Operator: +=
+        Operator: -
         '''
         copyCardList = self._copy()
         copyCardList.remove(cards)
@@ -235,7 +250,7 @@ class CardList:
         '''
         Insert a card or a list of card into current card list.
         The current object will be modified.
-        Operator: +=
+        Operator: -=
         '''
         self.remove(cards)
         return self
@@ -254,12 +269,30 @@ class CardList:
     
     def _insert_no_sort(self, card: Card) -> None:
         self.cardlist.append(card)
+    
+    @staticmethod
+    def setHash(suitMain: CardSuit, rankMain: int):
+        def _sort(card: Card):
+            num = card.ID
+            if num >= 52: # Joker
+                return num + 20
+            if suitMain is not None and card.suit & suitMain:
+                num = 52 + card.rank
+            if num % 13 == 0:
+                num += 12
+            else:
+                num -= 1
+            if card.rank == rankMain:
+                num = 65 + num // 13
+            return num
+        CardList.hashfunc = _sort
 
 if __name__ == "__main__":
     a = CardList([Card(52),Card(53),Card(24),Card(10), Card(10)])
+    print(a)
     b = a + Card(20)
-    b += CardList([Card(13),Card(39)])
-    b -= Card(20)
+    b += CardList([Card(13), Card(19)])
     print(b)
     print(b - CardList([Card(10), Card(10)]))
-    print(b >> CardSuit.filterSuit(CardSuit.Spade | CardSuit.Joker))
+    print(b >> (lambda card: card.rank == 10))
+    print([10, 10, 12] in b)
